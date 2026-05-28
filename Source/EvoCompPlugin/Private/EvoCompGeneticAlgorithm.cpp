@@ -33,12 +33,12 @@ void AEvoCompGeneticAlgorithm::InitializePopulationIfNeeded()
 
 float AEvoCompGeneticAlgorithm::EvaluateFitness(float GeneValue) const
 {
-	// Harder demonstration objective in [0,1]:
-	// a narrow global peak near 0.78 plus local ripples to make progression visible.
+	// Demonstration objective in [0,1]: a narrow global peak near 0.78 with local ripples.
+	// The ripple term is phase-aligned with the peak so the true global optimum remains reachable.
 	const float Delta = GeneValue - 0.78f;
-	const float Peak = FMath::Exp(-40.0f * Delta * Delta);
-	const float Ripple = 0.5f * (1.0f + FMath::Sin(24.0f * GeneValue));
-	const float Combined = (0.82f * Peak) + (0.18f * Ripple);
+	const float Peak = FMath::Exp(-32.0f * Delta * Delta);
+	const float Ripple = 0.5f * (1.0f + FMath::Cos(22.0f * Delta));
+	const float Combined = Peak * (0.78f + (0.22f * Ripple));
 	return FMath::Clamp(Combined, 0.0f, 1.0f);
 }
 
@@ -178,6 +178,15 @@ void AEvoCompGeneticAlgorithm::RunGeneticAlgorithm()
 		TEXT("[GA] Run complete | FinalGeneration=%d | FinalBestFitness=%.4f"),
 		CurrentGeneration,
 		BestFitness);
+
+	if (BestFitness < SafeFitnessThreshold)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[GA] Threshold not reached after %d generations (BestFitness=%.4f, Threshold=%.4f). Consider lowering Threshold or increasing MutationRate/PopulationSize for exploratory runs."),
+			SafeMaxGenerations,
+			BestFitness,
+			SafeFitnessThreshold);
+	}
 
 	UEvoCompPluginBPLibrary::ExecuteGeneticAlgorithm();
 }

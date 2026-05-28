@@ -39,51 +39,112 @@ For future algorithms, add a new concrete actor derived from `AEvoCompAlgorithmA
 5. Create a Blueprint derived from the new actor and name it `BP_XXX_Main`.
 6. Save that Blueprint in `/EvoCompPlugin` and add an editor menu entry for it if you want one-click access.
 
-## Configuration fields
 
-`GA | Configuration`:
+## Genetic Algorithm Implementation
 
-- `PopulationSize`
-- `MaxGenerations`
-- `MutationRate`
-- `CrossoverRate`
-- `FitnessThreshold`
-- `bEnableElitism`
+This section describes the current GA in mathematical form.
 
-`GA | Results` (read-only):
+### Search space
 
-- `CurrentGeneration`
-- `BestFitness`
+- Each individual is a single real gene $x \in [0,1]$.
+- Population at generation $t$ is:
+  $$P_t = \{x_1^{(t)}, x_2^{(t)}, \dots, x_N^{(t)}\}$$
 
-## Action behavior
+### Fitness function
 
-`Run Genetic Algorithm`:
+The objective combines a narrow global peak near $0.78$ and a local ripple term.
 
-- Resets internal state
-- Initializes a population
-- Executes generations until `MaxGenerations` or `FitnessThreshold` is reached
-- Prints generation-by-generation logs
+$$
+\Delta = x - 0.78
+$$
 
-`Step One Generation`:
+$$
+	ext{Peak}(x) = e^{-32\Delta^2}
+$$
 
-- Runs exactly one generation from current state
-- Prints start/end generation logs and threshold status
+$$
+	ext{Ripple}(x) = \frac{1 + \cos(22\Delta)}{2}
+$$
 
-`Reset Population`:
+$$
+f(x) = \operatorname{clamp}\left(\text{Peak}(x) \cdot \left(0.78 + 0.22\,\text{Ripple}(x)\right),\ 0,\ 1\right)
+$$
 
-- Clears GA state and counters
-- Prints a reset log
+### Selection
 
-## Implemented GA model (current)
+Tournament selection with tournament size 2:
 
-The actor runs a simple, deterministic-structure GA with stochastic evolution:
+1. Sample two indices $a,b$ uniformly from population indices.
+2. Select parent gene as
+   $$
+   x_{\text{parent}} =
+   \begin{cases}
+   x_a & f(x_a) \ge f(x_b) \\
+   x_b & \text{otherwise}
+   \end{cases}
+   $$
 
-- Gene representation: single float in `[0, 1]`
-- Fitness: parabola centered near `0.8` (`1 - (x - 0.8)^2`, clamped)
-- Parent selection: tournament selection
-- Crossover: weighted blend between two parents
-- Mutation: small additive perturbation with clamping
-- Elitism: optional carry-over of best individual
+### Crossover
 
-This is a practical baseline and suitable for editor experimentation. It can be extended to problem-specific genome and fitness functions later.
+With probability $p_c$ (`CrossoverRate`), offspring is blended from two parents:
 
+$$
+\alpha \sim U(0.2, 0.8), \quad
+x_{\text{child}} = \alpha x_A + (1-\alpha)x_B
+$$
+
+Otherwise, offspring starts as $x_A$.
+
+### Mutation
+
+With probability $p_m$ (`MutationRate`), apply additive perturbation:
+
+$$
+x_{\text{child}} \leftarrow x_{\text{child}} + \epsilon, \quad \epsilon \sim U(-0.1, 0.1)
+$$
+
+Then clamp to domain:
+
+$$
+x_{\text{child}} \leftarrow \operatorname{clamp}(x_{\text{child}}, 0, 1)
+$$
+
+### Elitism
+
+If `bEnableElitism = true`, copy the best individual from $P_t$ directly into $P_{t+1}$ before filling remaining slots.
+
+### Stopping criteria
+
+At each generation, track global best fitness:
+
+$$
+F_t = \max(F_{t-1}, \max_{x \in P_t} f(x))
+$$
+
+Track consecutive generations at or above threshold $\tau$ (`FitnessThreshold`):
+
+$$
+s_t =
+\begin{cases}
+s_{t-1}+1 & F_t \ge \tau \\
+0 & F_t < \tau
+\end{cases}
+$$
+
+Stop early only when both are true:
+
+- $t \ge G_{\min}$ (`MinGenerationsBeforeStop`)
+- $s_t \ge S_{\min}$ (`RequiredStableGenerations`)
+
+Otherwise continue until `MaxGenerations`.
+
+### Current default configuration
+
+- PopulationSize: 20
+- MaxGenerations: 500
+- MutationRate: 0.08
+- CrossoverRate: 0.80
+- FitnessThreshold: 0.965
+- MinGenerationsBeforeStop: 30
+- RequiredStableGenerations: 8
+- bEnableElitism: true
