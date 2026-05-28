@@ -1,0 +1,44 @@
+# Ignore everything in this plugin folder by default.
+*
+
+# Keep this ignore file.
+!.gitignore
+
+# Keep plugin descriptor.
+!EvoCompPlugin.uplugin
+
+# Keep source-controlled plugin folders.
+!Source/
+!Source/**
+!Resources/
+!Resources/**
+!Config/
+!Config/**
+!Content/
+!Content/**
+
+# Keep repository documentation and attributes.
+!README.md
+!LICENSE
+!CHANGELOG.md
+!.gitattributes
+
+# Never track generated plugin outputs.
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# Never track local IDE state.
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+
+# Temp and logs.
+*.log
+*.tmp
+*.temp
