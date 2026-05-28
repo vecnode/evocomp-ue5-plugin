@@ -48,6 +48,22 @@ public:
 		meta = (ToolTip = "Preserve top-performing individuals between generations to improve convergence stability."))
 	bool bEnableElitism = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GA | String Test",
+		meta = (ToolTip = "Target string the GA will evolve toward. Default is HELLO."))
+	FString TargetString = TEXT("HELLO");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GA | String Test",
+		meta = (ToolTip = "Use a fixed random seed for reproducible string-test runs."))
+	bool bUseDeterministicSeed = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GA | String Test",
+		meta = (ClampMin = "0", ToolTip = "Random seed used when deterministic mode is enabled."))
+	int32 RandomSeed = 1337;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GA | String Test | Results",
+		meta = (ToolTip = "Best candidate string found by the latest string-target run."))
+	FString BestCandidateString;
+
 	// ── Actions (appear as buttons in the Details panel) ─────────────────────
 
 	UFUNCTION(BlueprintCallable, Category = "GA | Actions",
@@ -59,6 +75,10 @@ public:
 	void StepOneGeneration();
 
 	UFUNCTION(BlueprintCallable, Category = "GA | Actions",
+		meta = (ToolTip = "Run a genetic algorithm that evolves random strings toward TargetString."))
+	void RunStringTargetTest();
+
+	UFUNCTION(BlueprintCallable, Category = "GA | Actions",
 		meta = (ToolTip = "Reset generation counters and clear current best result values."))
 	void ResetPopulation();
 
@@ -67,4 +87,10 @@ private:
 	float EvaluateFitness(float GeneValue) const;
 	float SelectParentGene(const TArray<float>& InPopulation, const TArray<float>& InFitnessValues) const;
 	void ExecuteOneGeneration();
+
+	FString SanitizeTargetString(const FString& InTarget) const;
+	FString CreateRandomCandidate(int32 Length) const;
+	FString SelectParentCandidate(const TArray<FString>& InPopulation, const TArray<float>& InFitnessValues) const;
+	float EvaluateStringFitness(const FString& Candidate, const FString& Target) const;
+	void MutateCandidate(FString& Candidate, float MutationChance) const;
 };

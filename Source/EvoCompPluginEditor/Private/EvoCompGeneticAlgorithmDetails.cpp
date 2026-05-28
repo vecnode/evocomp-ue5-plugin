@@ -61,6 +61,26 @@ void FEvoCompGeneticAlgorithmDetails::CustomizeDetails(IDetailLayoutBuilder& Det
 		})
 	];
 
+	Category.AddCustomRow(LOCTEXT("GAStringRunSearch", "Run String Target Test"))
+	.WholeRowContent()
+	[
+		SNew(SButton)
+		.Text(LOCTEXT("GAStringRunButton", "Run String Target Test"))
+		.ToolTipText(LOCTEXT("GAStringRunTooltip", "Evolve random strings toward TargetString (default HELLO)."))
+		.OnClicked_Lambda([Objects]()
+		{
+			for (const TWeakObjectPtr<UObject>& Object : Objects)
+			{
+				if (AEvoCompGeneticAlgorithm* GAActor = Cast<AEvoCompGeneticAlgorithm>(Object.Get()))
+				{
+					GAActor->RunStringTargetTest();
+				}
+			}
+
+			return FReply::Handled();
+		})
+	];
+
 	Category.AddCustomRow(LOCTEXT("GAResetSearch", "Reset Population"))
 	.WholeRowContent()
 	[
