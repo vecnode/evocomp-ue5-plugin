@@ -1,6 +1,6 @@
 # EvoCompPlugin
 
-A UE 5.7 plugin that provides a Details-panel-driven Genetic Algorithm workflow.
+Unreal Engine 5 C++ plugin with Evolutionary Computation algorithms.
 
 ## Overview
 
