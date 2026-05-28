@@ -3,8 +3,9 @@
 #include "IDetailCustomization.h"
 
 class IDetailLayoutBuilder;
+class AEvoCompGeneticAlgorithm;
 
-class FEvoCompMainActorDetails : public IDetailCustomization
+class FEvoCompGeneticAlgorithmDetails : public IDetailCustomization
 {
 public:
 	static TSharedRef<IDetailCustomization> MakeInstance();

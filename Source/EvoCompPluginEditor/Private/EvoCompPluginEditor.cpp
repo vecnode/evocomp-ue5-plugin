@@ -1,6 +1,7 @@
 #include "EvoCompPluginEditor.h"
 
-#include "EvoCompMainActorDetails.h"
+#include "EvoCompGeneticAlgorithmDetails.h"
+#include "EvoCompGeneticAlgorithm.h"
 
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Editor.h"
@@ -9,12 +10,31 @@
 
 #define LOCTEXT_NAMESPACE "FEvoCompPluginEditorModule"
 
+namespace
+{
+	struct FEvoCompAlgorithmBlueprintEntry
+	{
+		FText MenuLabel;
+		FText MenuTooltip;
+		const TCHAR* AssetObjectPath;
+		const TCHAR* MissingAssetName;
+	};
+
+	static const FEvoCompAlgorithmBlueprintEntry GeneticAlgorithmBlueprintEntry
+	{
+		LOCTEXT("OpenMainBlueprintLabel", "Open Genetic Algorithm Main Blueprint"),
+		LOCTEXT("OpenMainBlueprintTooltip", "Open or create the plugin genetic algorithm blueprint."),
+		TEXT("/EvoCompPlugin/BP_GA_Main.BP_GA_Main"),
+		TEXT("BP_GA_Main")
+	};
+}
+
 void FEvoCompPluginEditorModule::StartupModule()
 {
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
 	PropertyEditorModule.RegisterCustomClassLayout(
-		TEXT("EvoCompMainActor"),
-		FOnGetDetailCustomizationInstance::CreateStatic(&FEvoCompMainActorDetails::MakeInstance));
+		TEXT("EvoCompGeneticAlgorithm"),
+		FOnGetDetailCustomizationInstance::CreateStatic(&FEvoCompGeneticAlgorithmDetails::MakeInstance));
 
 	UToolMenus::RegisterStartupCallback(
 		FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FEvoCompPluginEditorModule::RegisterMenus));
@@ -25,7 +45,7 @@ void FEvoCompPluginEditorModule::ShutdownModule()
 	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
 	{
 		FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-		PropertyEditorModule.UnregisterCustomClassLayout(TEXT("EvoCompMainActor"));
+		PropertyEditorModule.UnregisterCustomClassLayout(TEXT("EvoCompGeneticAlgorithm"));
 	}
 
 	UToolMenus::UnregisterOwner(this);
@@ -42,8 +62,8 @@ void FEvoCompPluginEditorModule::AddMenuEntry(FToolMenuSection& Section)
 {
 	Section.AddMenuEntry(
 		"OpenMainGeneticAlgorithmBlueprint",
-		LOCTEXT("OpenMainBlueprintLabel", "Open Genetic Algorithm Main Blueprint"),
-		LOCTEXT("OpenMainBlueprintTooltip", "Open or create the plugin main blueprint widget."),
+		GeneticAlgorithmBlueprintEntry.MenuLabel,
+		GeneticAlgorithmBlueprintEntry.MenuTooltip,
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateRaw(this, &FEvoCompPluginEditorModule::OpenOrCreateMainBlueprint)));
 }
@@ -51,8 +71,7 @@ void FEvoCompPluginEditorModule::AddMenuEntry(FToolMenuSection& Section)
 void FEvoCompPluginEditorModule::OpenOrCreateMainBlueprint()
 {
 	// Open the BP_GA_Main actor blueprint created by the user in the Content Browser.
-	static const FString AssetObjectPath = TEXT("/EvoCompPlugin/BP_GA_Main.BP_GA_Main");
-	if (UObject* ExistingAsset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetObjectPath))
+	if (UObject* ExistingAsset = StaticLoadObject(UObject::StaticClass(), nullptr, GeneticAlgorithmBlueprintEntry.AssetObjectPath))
 	{
 		if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
 		{
@@ -62,7 +81,8 @@ void FEvoCompPluginEditorModule::OpenOrCreateMainBlueprint()
 	}
 
 	UE_LOG(LogTemp, Warning,
-		TEXT("[GA] BP_GA_Main not found. Create a Blueprint derived from AEvoCompMainActor in the Content Browser and name it BP_GA_Main."));
+		TEXT("[GA] %s not found. Create a Blueprint derived from AEvoCompGeneticAlgorithm in the Content Browser and name it BP_GA_Main."),
+		GeneticAlgorithmBlueprintEntry.MissingAssetName);
 }
 
 #undef LOCTEXT_NAMESPACE

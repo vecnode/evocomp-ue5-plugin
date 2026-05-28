@@ -1,17 +1,23 @@
-#include "EvoCompMainActor.h"
+#include "EvoCompGeneticAlgorithm.h"
+
 #include "EvoCompPluginBPLibrary.h"
 
 #include "Math/UnrealMathUtility.h"
-#include "Algo/MaxElement.h"
 
-void AEvoCompMainActor::InitializePopulationIfNeeded()
+AEvoCompGeneticAlgorithm::AEvoCompGeneticAlgorithm()
 {
-	if (bPopulationInitialized && Population.Num() == PopulationSize)
+	PrimaryActorTick.bCanEverTick = false;
+}
+
+void AEvoCompGeneticAlgorithm::InitializePopulationIfNeeded()
+{
+	const int32 SafePopulationSize = SanitizePositiveInt(PopulationSize);
+	if (bPopulationInitialized && Population.Num() == SafePopulationSize)
 	{
 		return;
 	}
 
-	Population.SetNum(PopulationSize);
+	Population.SetNum(SafePopulationSize);
 	for (float& Gene : Population)
 	{
 		Gene = FMath::FRand();
@@ -22,24 +28,33 @@ void AEvoCompMainActor::InitializePopulationIfNeeded()
 	BestFitness = 0.0f;
 	ConsecutiveGenerationsAboveThreshold = 0;
 
-	UE_LOG(LogTemp, Display, TEXT("[GA] Population initialized with %d random genes."), PopulationSize);
+	UE_LOG(LogTemp, Display, TEXT("[GA] Population initialized with %d random genes."), SafePopulationSize);
 }
 
-float AEvoCompMainActor::EvaluateFitness(float GeneValue) const
+float AEvoCompGeneticAlgorithm::EvaluateFitness(float GeneValue) const
 {
-	// Fitness function in [0,1]: peak around 0.8, smooth slope.
-	const float Delta = GeneValue - 0.8f;
-	return FMath::Clamp(1.0f - (Delta * Delta), 0.0f, 1.0f);
+	// Harder demonstration objective in [0,1]:
+	// a narrow global peak near 0.78 plus local ripples to make progression visible.
+	const float Delta = GeneValue - 0.78f;
+	const float Peak = FMath::Exp(-40.0f * Delta * Delta);
+	const float Ripple = 0.5f * (1.0f + FMath::Sin(24.0f * GeneValue));
+	const float Combined = (0.82f * Peak) + (0.18f * Ripple);
+	return FMath::Clamp(Combined, 0.0f, 1.0f);
 }
 
-float AEvoCompMainActor::SelectParentGene(const TArray<float>& InPopulation, const TArray<float>& InFitnessValues) const
+float AEvoCompGeneticAlgorithm::SelectParentGene(const TArray<float>& InPopulation, const TArray<float>& InFitnessValues) const
 {
+	if (InPopulation.IsEmpty())
+	{
+		return 0.0f;
+	}
+
 	const int32 A = FMath::RandRange(0, InPopulation.Num() - 1);
 	const int32 B = FMath::RandRange(0, InPopulation.Num() - 1);
 	return InFitnessValues[A] >= InFitnessValues[B] ? InPopulation[A] : InPopulation[B];
 }
 
-void AEvoCompMainActor::ExecuteOneGeneration()
+void AEvoCompGeneticAlgorithm::ExecuteOneGeneration()
 {
 	InitializePopulationIfNeeded();
 
@@ -73,6 +88,9 @@ void AEvoCompMainActor::ExecuteOneGeneration()
 		NextPopulation.Add(Population[BestIndex]);
 	}
 
+	const float SafeMutationRate = SanitizeUnitFloat(MutationRate);
+	const float SafeCrossoverRate = SanitizeUnitFloat(CrossoverRate);
+
 	// Build the rest of the generation via tournament selection, crossover, and mutation.
 	while (NextPopulation.Num() < Population.Num())
 	{
@@ -80,13 +98,13 @@ void AEvoCompMainActor::ExecuteOneGeneration()
 		const float ParentB = SelectParentGene(Population, FitnessValues);
 
 		float Child = ParentA;
-		if (FMath::FRand() < CrossoverRate)
+		if (FMath::FRand() < SafeCrossoverRate)
 		{
 			const float Alpha = FMath::FRandRange(0.2f, 0.8f);
 			Child = (Alpha * ParentA) + ((1.0f - Alpha) * ParentB);
 		}
 
-		if (FMath::FRand() < MutationRate)
+		if (FMath::FRand() < SafeMutationRate)
 		{
 			Child += FMath::FRandRange(-0.1f, 0.1f);
 		}
@@ -104,33 +122,34 @@ void AEvoCompMainActor::ExecuteOneGeneration()
 		BestFitness);
 }
 
-AEvoCompMainActor::AEvoCompMainActor()
+void AEvoCompGeneticAlgorithm::RunGeneticAlgorithm()
 {
-	PrimaryActorTick.bCanEverTick = false;
-}
+	ResetAlgorithmState();
 
-void AEvoCompMainActor::RunGeneticAlgorithm()
-{
-	CurrentGeneration = 0;
-	BestFitness = 0.0f;
-	bPopulationInitialized = false;
-	Population.Reset();
-	ConsecutiveGenerationsAboveThreshold = 0;
+	const int32 SafeMaxGenerations = SanitizePositiveInt(MaxGenerations);
+	const int32 SafeMinGenerationsBeforeStop = SanitizePositiveInt(MinGenerationsBeforeStop);
+	const int32 SafeRequiredStableGenerations = SanitizePositiveInt(RequiredStableGenerations);
+	const float SafeMutationRate = SanitizeUnitFloat(MutationRate);
+	const float SafeCrossoverRate = SanitizeUnitFloat(CrossoverRate);
+	const float SafeFitnessThreshold = SanitizeUnitFloat(FitnessThreshold);
 
 	UE_LOG(LogTemp, Display,
 		TEXT("[GA] Run button clicked | PopSize=%d | MaxGen=%d | MutRate=%.3f | Crossover=%.3f | Threshold=%.3f | MinStopGen=%d | StableGen=%d | Elitism=%s"),
-		PopulationSize, MaxGenerations, MutationRate, CrossoverRate,
-		FitnessThreshold,
-		MinGenerationsBeforeStop,
-		RequiredStableGenerations,
+		SanitizePositiveInt(PopulationSize),
+		SafeMaxGenerations,
+		SafeMutationRate,
+		SafeCrossoverRate,
+		SafeFitnessThreshold,
+		SafeMinGenerationsBeforeStop,
+		SafeRequiredStableGenerations,
 		bEnableElitism ? TEXT("true") : TEXT("false"));
 
-	for (int32 Index = 0; Index < MaxGenerations; ++Index)
+	for (int32 Index = 0; Index < SafeMaxGenerations; ++Index)
 	{
 		ExecuteOneGeneration();
 		const float CurrentBest = BestFitness;
 
-		if (CurrentBest >= FitnessThreshold)
+		if (CurrentBest >= SafeFitnessThreshold)
 		{
 			++ConsecutiveGenerationsAboveThreshold;
 		}
@@ -140,8 +159,8 @@ void AEvoCompMainActor::RunGeneticAlgorithm()
 		}
 
 		// Stop only after the threshold is sustained long enough to reduce random lucky spikes.
-		const bool bReachedMinGeneration = CurrentGeneration >= MinGenerationsBeforeStop;
-		const bool bReachedStability = ConsecutiveGenerationsAboveThreshold >= RequiredStableGenerations;
+		const bool bReachedMinGeneration = CurrentGeneration >= SafeMinGenerationsBeforeStop;
+		const bool bReachedStability = ConsecutiveGenerationsAboveThreshold >= SafeRequiredStableGenerations;
 
 		if (bReachedMinGeneration && bReachedStability)
 		{
@@ -149,7 +168,7 @@ void AEvoCompMainActor::RunGeneticAlgorithm()
 				TEXT("[GA] Target reached at generation %d (BestFitness=%.4f, Threshold=%.4f, StableCount=%d)"),
 				CurrentGeneration,
 				BestFitness,
-				FitnessThreshold,
+				SafeFitnessThreshold,
 				ConsecutiveGenerationsAboveThreshold);
 			break;
 		}
@@ -163,19 +182,23 @@ void AEvoCompMainActor::RunGeneticAlgorithm()
 	UEvoCompPluginBPLibrary::ExecuteGeneticAlgorithm();
 }
 
-void AEvoCompMainActor::StepOneGeneration()
+void AEvoCompGeneticAlgorithm::StepOneGeneration()
 {
 	UE_LOG(LogTemp, Display, TEXT("[GA] Step button clicked"));
 
-	if (CurrentGeneration >= MaxGenerations)
+	const int32 SafeMaxGenerations = SanitizePositiveInt(MaxGenerations);
+	const float SafeFitnessThreshold = SanitizeUnitFloat(FitnessThreshold);
+	const int32 SafeRequiredStableGenerations = SanitizePositiveInt(RequiredStableGenerations);
+
+	if (CurrentGeneration >= SafeMaxGenerations)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[GA] StepOneGeneration | Already reached MaxGenerations (%d)"), MaxGenerations);
+		UE_LOG(LogTemp, Warning, TEXT("[GA] StepOneGeneration | Already reached MaxGenerations (%d)"), SafeMaxGenerations);
 		return;
 	}
 
 	ExecuteOneGeneration();
 	const float CurrentBest = BestFitness;
-	if (CurrentBest >= FitnessThreshold)
+	if (CurrentBest >= SafeFitnessThreshold)
 	{
 		++ConsecutiveGenerationsAboveThreshold;
 	}
@@ -184,23 +207,19 @@ void AEvoCompMainActor::StepOneGeneration()
 		ConsecutiveGenerationsAboveThreshold = 0;
 	}
 
-	if (CurrentBest >= FitnessThreshold)
+	if (CurrentBest >= SafeFitnessThreshold)
 	{
 		UE_LOG(LogTemp, Display,
 			TEXT("[GA] Threshold reached after manual step at generation %d (BestFitness=%.4f, StableCount=%d/%d)"),
 			CurrentGeneration,
 			BestFitness,
 			ConsecutiveGenerationsAboveThreshold,
-			RequiredStableGenerations);
+			SafeRequiredStableGenerations);
 	}
 }
 
-void AEvoCompMainActor::ResetPopulation()
+void AEvoCompGeneticAlgorithm::ResetPopulation()
 {
-	CurrentGeneration = 0;
-	BestFitness = 0.0f;
-	bPopulationInitialized = false;
-	Population.Reset();
-	ConsecutiveGenerationsAboveThreshold = 0;
+	ResetAlgorithmState();
 	UE_LOG(LogTemp, Display, TEXT("[GA] Reset button clicked | State cleared."));
 }

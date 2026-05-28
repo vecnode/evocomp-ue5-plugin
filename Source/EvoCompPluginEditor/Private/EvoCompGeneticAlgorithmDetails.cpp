@@ -1,20 +1,20 @@
-#include "EvoCompMainActorDetails.h"
+#include "EvoCompGeneticAlgorithmDetails.h"
 
 #include "DetailCategoryBuilder.h"
 #include "DetailLayoutBuilder.h"
 #include "DetailWidgetRow.h"
-#include "EvoCompMainActor.h"
+#include "EvoCompGeneticAlgorithm.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "FEvoCompMainActorDetails"
+#define LOCTEXT_NAMESPACE "FEvoCompGeneticAlgorithmDetails"
 
-TSharedRef<IDetailCustomization> FEvoCompMainActorDetails::MakeInstance()
+TSharedRef<IDetailCustomization> FEvoCompGeneticAlgorithmDetails::MakeInstance()
 {
-	return MakeShared<FEvoCompMainActorDetails>();
+	return MakeShared<FEvoCompGeneticAlgorithmDetails>();
 }
 
-void FEvoCompMainActorDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
+void FEvoCompGeneticAlgorithmDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuilder)
 {
 	TArray<TWeakObjectPtr<UObject>> Objects;
 	DetailBuilder.GetObjectsBeingCustomized(Objects);
@@ -31,7 +31,7 @@ void FEvoCompMainActorDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuil
 		{
 			for (const TWeakObjectPtr<UObject>& Object : Objects)
 			{
-				if (AEvoCompMainActor* GAActor = Cast<AEvoCompMainActor>(Object.Get()))
+				if (AEvoCompGeneticAlgorithm* GAActor = Cast<AEvoCompGeneticAlgorithm>(Object.Get()))
 				{
 					GAActor->RunGeneticAlgorithm();
 				}
@@ -51,7 +51,7 @@ void FEvoCompMainActorDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuil
 		{
 			for (const TWeakObjectPtr<UObject>& Object : Objects)
 			{
-				if (AEvoCompMainActor* GAActor = Cast<AEvoCompMainActor>(Object.Get()))
+				if (AEvoCompGeneticAlgorithm* GAActor = Cast<AEvoCompGeneticAlgorithm>(Object.Get()))
 				{
 					GAActor->StepOneGeneration();
 				}
@@ -71,7 +71,7 @@ void FEvoCompMainActorDetails::CustomizeDetails(IDetailLayoutBuilder& DetailBuil
 		{
 			for (const TWeakObjectPtr<UObject>& Object : Objects)
 			{
-				if (AEvoCompMainActor* GAActor = Cast<AEvoCompMainActor>(Object.Get()))
+				if (AEvoCompGeneticAlgorithm* GAActor = Cast<AEvoCompGeneticAlgorithm>(Object.Get()))
 				{
 					GAActor->ResetPopulation();
 				}
