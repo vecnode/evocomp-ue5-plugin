@@ -22,7 +22,7 @@ void AEvoCompMainActor::InitializePopulationIfNeeded()
 	BestFitness = 0.0f;
 	ConsecutiveGenerationsAboveThreshold = 0;
 
-	UE_LOG(LogTemp, Display, TEXT("[GA] Population initialized with %d individuals."), PopulationSize);
+	UE_LOG(LogTemp, Display, TEXT("[GA] Population initialized with %d random genes."), PopulationSize);
 }
 
 float AEvoCompMainActor::EvaluateFitness(float GeneValue) const
@@ -67,11 +67,13 @@ void AEvoCompMainActor::ExecuteOneGeneration()
 	TArray<float> NextPopulation;
 	NextPopulation.Reserve(Population.Num());
 
+	// Keep the strongest individual untouched so progress is not lost between generations.
 	if (bEnableElitism)
 	{
 		NextPopulation.Add(Population[BestIndex]);
 	}
 
+	// Build the rest of the generation via tournament selection, crossover, and mutation.
 	while (NextPopulation.Num() < Population.Num())
 	{
 		const float ParentA = SelectParentGene(Population, FitnessValues);
@@ -137,6 +139,7 @@ void AEvoCompMainActor::RunGeneticAlgorithm()
 			ConsecutiveGenerationsAboveThreshold = 0;
 		}
 
+		// Stop only after the threshold is sustained long enough to reduce random lucky spikes.
 		const bool bReachedMinGeneration = CurrentGeneration >= MinGenerationsBeforeStop;
 		const bool bReachedStability = ConsecutiveGenerationsAboveThreshold >= RequiredStableGenerations;
 
