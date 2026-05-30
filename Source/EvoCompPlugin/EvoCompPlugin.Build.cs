@@ -36,6 +36,7 @@ public class EvoCompPlugin : ModuleRules
 			{
 				"CoreUObject",
 				"Engine",
+				"Paper2D",
 				"Slate",
 				"SlateCore",
 				// ... add private dependencies that you statically link with here ...	

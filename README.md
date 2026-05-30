@@ -8,9 +8,11 @@ This plugin includes:
 
 - A shared evolutionary base actor: `AEvoCompAlgorithmActor`
 - A runtime GA actor class: `AEvoCompGeneticAlgorithm`
+- A runtime image-evolution actor class: `AEvoCompImageEvolutionAlgorithm`
 - A plugin-level Blueprint utility node: `Execute Genetic Algorithm`
 - An editor menu shortcut:
   - `Window -> Genetic Algorithm -> Open Genetic Algorithm Main Blueprint`
+  - `Window -> Genetic Algorithm -> Open Image Evolution Main Blueprint`
 
 
 
@@ -146,4 +148,82 @@ Recommended starting values for quick convergence:
 
 
 </details>
+
+<details>
+
+<summary>Image Evolution (Random-to-Target Patch Genome)</summary>
+
+![image-github1](./Content/Targets/github_img1.png)
+
+#### Purpose
+
+Evolve a population of grayscale patch genomes toward a target image by minimizing patchwise grayscale error.
+The actor renders both target and evolving outputs on two plane meshes in-world.
+
+#### Genome and Phenotype
+
+- Genome length: `PatchColumns * PatchRows`
+- Gene domain: `g_i in [0,1]` (grayscale)
+- Phenotype: each gene controls one patch intensity in the synthesized image.
+
+#### Fitness
+
+Given target patch grayscale values `t_i` and candidate genes `g_i`:
+
+$$
+  \text{MAE}(g,t)=\frac{1}{N}\sum_{i=1}^{N}|g_i-t_i|,\qquad
+f(g)=1-\text{MAE}(g,t)
+$$
+
+So `f in [0,1]`, higher is better.
+
+#### Generation Update (Literature-aligned Evolution Loop)
+
+1) Evaluate all individuals.
+2) Rank by descending fitness.
+3) Build next generation with elitism and rank-biased recombination.
+4) Inject genes from the next-highest fitness individual with uniform crossover probability.
+5) Apply mutation (reset or additive perturbation).
+
+Core requested operator:
+
+- Let `g^(1)` be best individual and `g^(2)` be second-best.
+- Child starts from `g^(1)`.
+- For each gene `i`, with probability `SecondBestGeneBorrowRate`, set child gene from `g^(2)_i`.
+
+#### Realtime Animation
+
+- Enable `bRealtimeEvolution`.
+- Each actor tick executes `GenerationsPerTick` generation steps.
+- During updates, the evolving preview texture is rebuilt from the current best genome and rebound to the evolving plane material.
+- If world tick is not driving the actor (common in editor-only contexts), a fallback ticker continues realtime stepping.
+
+#### Blueprint / Viewport Usage
+
+- Run actions from a placed actor instance in a level.
+- Calling action buttons from Blueprint class defaults can execute on the CDO (`Default__...`, `World=None`), which is not a live world instance.
+- Current implementation forwards template calls to a real instance when one is found; if none exists, it logs a warning and does not run evolution on the CDO.
+
+#### Source-Control Image Placement
+
+- Import runtime target images into: `/EvoCompPlugin/Targets`
+- Optional archival of raw original files: `Resources/ReferenceImages`
+
+Suggested setup for a 512x512 target image:
+
+- Import image into plugin content (for example: `/EvoCompPlugin/Targets`) as a `Texture2D`.
+- Assign it to `TargetTexture` in your image-evolution Blueprint instance.
+- Start with:
+  - `PatchColumns=32`, `PatchRows=32`
+  - `PopulationSize=64`
+  - `MutationRate=0.03`
+  - `MutationResetChance=0.20`
+  - `MutationStepSize=0.08`
+  - `SecondBestGeneBorrowRate=0.25`
+  - `TopRankParentPoolSize=6`
+  - `bEnableElitism=true`
+  - `PreviewResolution=512`
+
+</details>
+
 

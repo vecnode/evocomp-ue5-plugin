@@ -20,11 +20,11 @@ protected:
 	static int32 SanitizePositiveInt(int32 Value);
 	static float SanitizeUnitFloat(float Value);
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Algorithm | Results",
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Algorithm | Results",
 		meta = (ToolTip = "Current generation index reached by the run."))
 	int32 CurrentGeneration = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Algorithm | Results",
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Algorithm | Results",
 		meta = (ToolTip = "Best fitness value found so far during the run."))
 	float BestFitness = 0.0f;
 

@@ -14,4 +14,5 @@ private:
 	void RegisterMenus();
 	void AddMenuEntry(FToolMenuSection& Section);
 	void OpenOrCreateMainBlueprint();
+	void OpenOrCreateImageEvolutionBlueprint();
 };
