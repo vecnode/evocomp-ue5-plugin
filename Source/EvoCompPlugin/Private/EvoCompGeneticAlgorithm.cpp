@@ -2,39 +2,89 @@
 
 #include "EvoCompPluginBPLibrary.h"
 
+#include "Components/SceneComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Containers/UnrealString.h"
 #include "Math/UnrealMathUtility.h"
 
 namespace
 {
-	static constexpr TCHAR GAStringAlphabet[] = TEXT(" ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-	static constexpr int32 GAStringAlphabetLastIndex = 26;
+	static const FString& GetGAStringAlphabet()
+	{
+		static const FString Alphabet = TEXT(" abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?'-");
+		return Alphabet;
+	}
 
 	int32 CharToAlphabetIndex(TCHAR Character)
 	{
-		if (Character == TEXT(' '))
+		const FString& Alphabet = GetGAStringAlphabet();
+		int32 Index = 0;
+		if (Alphabet.FindChar(Character, Index))
 		{
-			return 0;
+			return Index;
 		}
-
-		if (Character >= TEXT('A') && Character <= TEXT('Z'))
-		{
-			return (Character - TEXT('A')) + 1;
-		}
-
-		return 0;
+		return Index;
 	}
 
 	TCHAR RandomAlphabetChar()
 	{
-		const int32 Index = FMath::RandRange(0, GAStringAlphabetLastIndex);
-		return GAStringAlphabet[Index];
+		const FString& Alphabet = GetGAStringAlphabet();
+		const int32 Index = FMath::RandRange(0, Alphabet.Len() - 1);
+		return Alphabet[Index];
 	}
 }
 
 AEvoCompGeneticAlgorithm::AEvoCompGeneticAlgorithm()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = true;
+
+	DisplayRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DisplayRoot"));
+	SetRootComponent(DisplayRoot);
+
+	TargetTextComponent = CreateDefaultSubobject<UTextRenderComponent>(TEXT("TargetText"));
+	TargetTextComponent->SetupAttachment(DisplayRoot);
+	TargetTextComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 140.0f));
+	TargetTextComponent->SetHorizontalAlignment(EHTA_Left);
+	TargetTextComponent->SetWorldSize(30.0f);
+	TargetTextComponent->SetTextRenderColor(FColor(110, 210, 255));
+
+	CurrentTextComponent = CreateDefaultSubobject<UTextRenderComponent>(TEXT("CurrentText"));
+	CurrentTextComponent->SetupAttachment(DisplayRoot);
+	CurrentTextComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 90.0f));
+	CurrentTextComponent->SetHorizontalAlignment(EHTA_Left);
+	CurrentTextComponent->SetWorldSize(30.0f);
+	CurrentTextComponent->SetTextRenderColor(FColor::White);
+
+	CurrentCandidateString = TEXT("Press Run to start evolution...");
+	RefreshDisplayText();
+}
+
+void AEvoCompGeneticAlgorithm::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!bStringEvolutionRunning)
+	{
+		return;
+	}
+
+	const int32 SafeGenerationsPerTick = SanitizePositiveInt(StringGenerationsPerTick);
+	for (int32 StepIndex = 0; StepIndex < SafeGenerationsPerTick && bStringEvolutionRunning; ++StepIndex)
+	{
+		StepStringGeneration();
+	}
+}
+
+void AEvoCompGeneticAlgorithm::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	RefreshDisplayText();
+}
+
+bool AEvoCompGeneticAlgorithm::ShouldTickIfViewportsOnly() const
+{
+	return true;
 }
 
 void AEvoCompGeneticAlgorithm::InitializePopulationIfNeeded()
@@ -55,8 +105,6 @@ void AEvoCompGeneticAlgorithm::InitializePopulationIfNeeded()
 	CurrentGeneration = 0;
 	BestFitness = 0.0f;
 	ConsecutiveGenerationsAboveThreshold = 0;
-
-	UE_LOG(LogTemp, Display, TEXT("[GA] Population initialized with %d random genes."), SafePopulationSize);
 }
 
 float AEvoCompGeneticAlgorithm::EvaluateFitness(float GeneValue) const
@@ -87,7 +135,6 @@ void AEvoCompGeneticAlgorithm::ExecuteOneGeneration()
 	InitializePopulationIfNeeded();
 
 	const int32 NextGeneration = CurrentGeneration + 1;
-	UE_LOG(LogTemp, Display, TEXT("[GA] Start Generation %d"), NextGeneration);
 
 	TArray<float> FitnessValues;
 	FitnessValues.SetNum(Population.Num());
@@ -104,7 +151,6 @@ void AEvoCompGeneticAlgorithm::ExecuteOneGeneration()
 		}
 	}
 
-	const float PreviousBest = BestFitness;
 	BestFitness = FMath::Max(BestFitness, CurrentBestFitness);
 
 	TArray<float> NextPopulation;
@@ -142,87 +188,17 @@ void AEvoCompGeneticAlgorithm::ExecuteOneGeneration()
 
 	Population = MoveTemp(NextPopulation);
 	CurrentGeneration = NextGeneration;
-
-	UE_LOG(LogTemp, Display,
-		TEXT("[GA] End Generation %d | BestFitness: %.4f -> %.4f"),
-		CurrentGeneration,
-		PreviousBest,
-		BestFitness);
 }
 
 void AEvoCompGeneticAlgorithm::RunGeneticAlgorithm()
 {
-	ResetAlgorithmState();
-
-	const int32 SafeMaxGenerations = SanitizePositiveInt(MaxGenerations);
-	const int32 SafeMinGenerationsBeforeStop = SanitizePositiveInt(MinGenerationsBeforeStop);
-	const int32 SafeRequiredStableGenerations = SanitizePositiveInt(RequiredStableGenerations);
-	const float SafeMutationRate = SanitizeUnitFloat(MutationRate);
-	const float SafeCrossoverRate = SanitizeUnitFloat(CrossoverRate);
-	const float SafeFitnessThreshold = SanitizeUnitFloat(FitnessThreshold);
-
-	UE_LOG(LogTemp, Display,
-		TEXT("[GA] Run button clicked | PopSize=%d | MaxGen=%d | MutRate=%.3f | Crossover=%.3f | Threshold=%.3f | MinStopGen=%d | StableGen=%d | Elitism=%s"),
-		SanitizePositiveInt(PopulationSize),
-		SafeMaxGenerations,
-		SafeMutationRate,
-		SafeCrossoverRate,
-		SafeFitnessThreshold,
-		SafeMinGenerationsBeforeStop,
-		SafeRequiredStableGenerations,
-		bEnableElitism ? TEXT("true") : TEXT("false"));
-
-	for (int32 Index = 0; Index < SafeMaxGenerations; ++Index)
-	{
-		ExecuteOneGeneration();
-		const float CurrentBest = BestFitness;
-
-		if (CurrentBest >= SafeFitnessThreshold)
-		{
-			++ConsecutiveGenerationsAboveThreshold;
-		}
-		else
-		{
-			ConsecutiveGenerationsAboveThreshold = 0;
-		}
-
-		// Stop only after the threshold is sustained long enough to reduce random lucky spikes.
-		const bool bReachedMinGeneration = CurrentGeneration >= SafeMinGenerationsBeforeStop;
-		const bool bReachedStability = ConsecutiveGenerationsAboveThreshold >= SafeRequiredStableGenerations;
-
-		if (bReachedMinGeneration && bReachedStability)
-		{
-			UE_LOG(LogTemp, Display,
-				TEXT("[GA] Target reached at generation %d (BestFitness=%.4f, Threshold=%.4f, StableCount=%d)"),
-				CurrentGeneration,
-				BestFitness,
-				SafeFitnessThreshold,
-				ConsecutiveGenerationsAboveThreshold);
-			break;
-		}
-	}
-
-	UE_LOG(LogTemp, Display,
-		TEXT("[GA] Run complete | FinalGeneration=%d | FinalBestFitness=%.4f"),
-		CurrentGeneration,
-		BestFitness);
-
-	if (BestFitness < SafeFitnessThreshold)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[GA] Threshold not reached after %d generations (BestFitness=%.4f, Threshold=%.4f). Consider lowering Threshold or increasing MutationRate/PopulationSize for exploratory runs."),
-			SafeMaxGenerations,
-			BestFitness,
-			SafeFitnessThreshold);
-	}
-
-	UEvoCompPluginBPLibrary::ExecuteGeneticAlgorithm();
+	// Keep the existing blueprint wiring intact, but route the main Run action
+	// to the string-evolution demo so the displayed text advances on tick.
+	RunStringTargetTest();
 }
 
 void AEvoCompGeneticAlgorithm::StepOneGeneration()
 {
-	UE_LOG(LogTemp, Display, TEXT("[GA] Step button clicked"));
-
 	const int32 SafeMaxGenerations = SanitizePositiveInt(MaxGenerations);
 	const float SafeFitnessThreshold = SanitizeUnitFloat(FitnessThreshold);
 	const int32 SafeRequiredStableGenerations = SanitizePositiveInt(RequiredStableGenerations);
@@ -259,20 +235,42 @@ void AEvoCompGeneticAlgorithm::ResetPopulation()
 {
 	ResetAlgorithmState();
 	BestCandidateString.Reset();
-	UE_LOG(LogTemp, Display, TEXT("[GA] Reset button clicked | State cleared."));
+	StringPopulation.Reset();
+	ActiveTargetString.Reset();
+	ActiveTargetLength = 0;
+	LastLoggedMatchCount = 0;
+	bStringEvolutionRunning = false;
+	CurrentCandidateString = TEXT("Press Run to start evolution...");
+	RefreshDisplayText();
+	UE_LOG(LogTemp, Display, TEXT("[GA-STRING] State reset."));
+}
+
+void AEvoCompGeneticAlgorithm::RefreshDisplayText()
+{
+	if (TargetTextComponent)
+	{
+		const FString DisplayTarget = ActiveTargetString.IsEmpty() ? SanitizeTargetString(TargetString) : ActiveTargetString;
+		TargetTextComponent->SetText(FText::FromString(FString::Printf(TEXT("Target: %s"), *DisplayTarget)));
+	}
+
+	if (CurrentTextComponent)
+	{
+		CurrentTextComponent->SetText(FText::FromString(FString::Printf(TEXT("Current: %s"), *CurrentCandidateString)));
+	}
 }
 
 FString AEvoCompGeneticAlgorithm::SanitizeTargetString(const FString& InTarget) const
 {
-	FString Upper = InTarget.ToUpper();
-	Upper.TrimStartAndEndInline();
+	FString Trimmed = InTarget;
+	Trimmed.TrimStartAndEndInline();
 
 	FString Sanitized;
-	Sanitized.Reserve(Upper.Len());
+	Sanitized.Reserve(Trimmed.Len());
+	const FString& Alphabet = GetGAStringAlphabet();
 
-	for (TCHAR Character : Upper)
+	for (TCHAR Character : Trimmed)
 	{
-		if (Character >= TEXT('A') && Character <= TEXT('Z'))
+		if (Alphabet.Contains(FString::Chr(Character)))
 		{
 			Sanitized.AppendChar(Character);
 			continue;
@@ -288,8 +286,8 @@ FString AEvoCompGeneticAlgorithm::SanitizeTargetString(const FString& InTarget) 
 
 	if (Sanitized.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[GA] TargetString became empty after sanitization. Falling back to HELLO."));
-		return TEXT("HELLO");
+		UE_LOG(LogTemp, Warning, TEXT("[GA-STRING] TargetString became empty after sanitization. Falling back to default sentence."));
+		return TEXT("This is my target string for the genetic algorithm.");
 	}
 
 	return Sanitized;
@@ -320,6 +318,25 @@ FString AEvoCompGeneticAlgorithm::SelectParentCandidate(const TArray<FString>& I
 	return InFitnessValues[A] >= InFitnessValues[B] ? InPopulation[A] : InPopulation[B];
 }
 
+int32 AEvoCompGeneticAlgorithm::CountExactMatches(const FString& Candidate, const FString& Target) const
+{
+	if (Candidate.Len() != Target.Len() || Candidate.IsEmpty())
+	{
+		return 0;
+	}
+
+	int32 ExactMatches = 0;
+	for (int32 Index = 0; Index < Target.Len(); ++Index)
+	{
+		if (Candidate[Index] == Target[Index])
+		{
+			++ExactMatches;
+		}
+	}
+
+	return ExactMatches;
+}
+
 float AEvoCompGeneticAlgorithm::EvaluateStringFitness(const FString& Candidate, const FString& Target) const
 {
 	const int32 TargetLength = Target.Len();
@@ -344,7 +361,8 @@ float AEvoCompGeneticAlgorithm::EvaluateStringFitness(const FString& Candidate, 
 		const int32 CandidateIndex = CharToAlphabetIndex(CandidateChar);
 		const int32 TargetIndex = CharToAlphabetIndex(TargetChar);
 		const float Distance = static_cast<float>(FMath::Abs(CandidateIndex - TargetIndex));
-		const float Closeness = 1.0f - (Distance / static_cast<float>(GAStringAlphabetLastIndex));
+		const float MaxIndex = static_cast<float>(GetGAStringAlphabet().Len() - 1);
+		const float Closeness = 1.0f - (Distance / MaxIndex);
 		ClosenessAccumulator += FMath::Clamp(Closeness, 0.0f, 1.0f);
 	}
 
@@ -359,10 +377,15 @@ float AEvoCompGeneticAlgorithm::EvaluateStringFitness(const FString& Candidate, 
 	return FMath::Clamp(Combined, 0.0f, 1.0f);
 }
 
-void AEvoCompGeneticAlgorithm::MutateCandidate(FString& Candidate, float MutationChance) const
+void AEvoCompGeneticAlgorithm::MutateCandidate(FString& Candidate, const FString& Target, float MutationChance) const
 {
 	for (int32 Index = 0; Index < Candidate.Len(); ++Index)
 	{
+		if (Index < Target.Len() && Candidate[Index] == Target[Index])
+		{
+			continue;
+		}
+
 		if (FMath::FRand() < MutationChance)
 		{
 			Candidate[Index] = RandomAlphabetChar();
@@ -374,16 +397,56 @@ void AEvoCompGeneticAlgorithm::RunStringTargetTest()
 {
 	ResetAlgorithmState();
 	BestCandidateString.Reset();
+	CurrentCandidateString.Reset();
+	StringPopulation.Reset();
+	bStringEvolutionRunning = false;
 
 	if (bUseDeterministicSeed)
 	{
 		FMath::RandInit(FMath::Max(RandomSeed, 0));
 	}
 
-	const FString SanitizedTarget = SanitizeTargetString(TargetString);
-	const int32 TargetLength = SanitizedTarget.Len();
+	ActiveTargetString = SanitizeTargetString(TargetString);
+	ActiveTargetLength = ActiveTargetString.Len();
 
 	const int32 SafePopulationSize = SanitizePositiveInt(PopulationSize);
+	const float SafeMutationRate = SanitizeUnitFloat(MutationRate);
+	const float SafeCrossoverRate = SanitizeUnitFloat(CrossoverRate);
+	const float SafeFitnessThreshold = SanitizeUnitFloat(FitnessThreshold);
+
+	UE_LOG(LogTemp, Display,
+		TEXT("[GA-STRING] Run started | Target=\"%s\" | PopSize=%d | MaxGen=%d | MutRate=%.3f | Crossover=%.3f | Threshold=%.3f | Deterministic=%s | Seed=%d"),
+		*ActiveTargetString,
+		SafePopulationSize,
+		SanitizePositiveInt(MaxGenerations),
+		SafeMutationRate,
+		SafeCrossoverRate,
+		SafeFitnessThreshold,
+		bUseDeterministicSeed ? TEXT("true") : TEXT("false"),
+		RandomSeed);
+
+	StringPopulation.Reserve(SafePopulationSize);
+	for (int32 Index = 0; Index < SafePopulationSize; ++Index)
+	{
+		StringPopulation.Add(CreateRandomCandidate(ActiveTargetLength));
+	}
+
+	if (!StringPopulation.IsEmpty())
+	{
+		CurrentCandidateString = StringPopulation[0];
+	}
+
+	bStringEvolutionRunning = true;
+	RefreshDisplayText();
+}
+
+void AEvoCompGeneticAlgorithm::StepStringGeneration()
+{
+	if (!bStringEvolutionRunning || StringPopulation.IsEmpty() || ActiveTargetLength <= 0)
+	{
+		return;
+	}
+
 	const int32 SafeMaxGenerations = SanitizePositiveInt(MaxGenerations);
 	const int32 SafeMinGenerationsBeforeStop = SanitizePositiveInt(MinGenerationsBeforeStop);
 	const int32 SafeRequiredStableGenerations = SanitizePositiveInt(RequiredStableGenerations);
@@ -391,118 +454,113 @@ void AEvoCompGeneticAlgorithm::RunStringTargetTest()
 	const float SafeCrossoverRate = SanitizeUnitFloat(CrossoverRate);
 	const float SafeFitnessThreshold = SanitizeUnitFloat(FitnessThreshold);
 
-	UE_LOG(LogTemp, Display,
-		TEXT("[GA-STRING] Run started | Target=\"%s\" | PopSize=%d | MaxGen=%d | MutRate=%.3f | Crossover=%.3f | Threshold=%.3f | Deterministic=%s | Seed=%d"),
-		*SanitizedTarget,
-		SafePopulationSize,
-		SafeMaxGenerations,
-		SafeMutationRate,
-		SafeCrossoverRate,
-		SafeFitnessThreshold,
-		bUseDeterministicSeed ? TEXT("true") : TEXT("false"),
-		RandomSeed);
-
-	TArray<FString> StringPopulation;
-	StringPopulation.Reserve(SafePopulationSize);
-	for (int32 Index = 0; Index < SafePopulationSize; ++Index)
+	if (CurrentGeneration >= SafeMaxGenerations)
 	{
-		StringPopulation.Add(CreateRandomCandidate(TargetLength));
-	}
-
-	for (int32 GenerationIndex = 0; GenerationIndex < SafeMaxGenerations; ++GenerationIndex)
-	{
-		CurrentGeneration = GenerationIndex + 1;
-
-		TArray<float> FitnessValues;
-		FitnessValues.SetNum(StringPopulation.Num());
-
-		int32 BestIndex = 0;
-		float GenerationBestFitness = -1.0f;
-
-		for (int32 CandidateIndex = 0; CandidateIndex < StringPopulation.Num(); ++CandidateIndex)
-		{
-			FitnessValues[CandidateIndex] = EvaluateStringFitness(StringPopulation[CandidateIndex], SanitizedTarget);
-			if (FitnessValues[CandidateIndex] > GenerationBestFitness)
-			{
-				GenerationBestFitness = FitnessValues[CandidateIndex];
-				BestIndex = CandidateIndex;
-			}
-		}
-
-		if (GenerationBestFitness > BestFitness)
-		{
-			BestFitness = GenerationBestFitness;
-			BestCandidateString = StringPopulation[BestIndex];
-		}
-
-		if (GenerationBestFitness >= SafeFitnessThreshold)
-		{
-			++ConsecutiveGenerationsAboveThreshold;
-		}
-		else
-		{
-			ConsecutiveGenerationsAboveThreshold = 0;
-		}
-
-		const bool bReachedMinGeneration = CurrentGeneration >= SafeMinGenerationsBeforeStop;
-		const bool bReachedStability = ConsecutiveGenerationsAboveThreshold >= SafeRequiredStableGenerations;
-		const bool bExactMatchFound = BestCandidateString == SanitizedTarget;
-
-		if (bExactMatchFound || (bReachedMinGeneration && bReachedStability))
-		{
-			UE_LOG(LogTemp, Display,
-				TEXT("[GA-STRING] Stopping at generation %d | Best=\"%s\" | BestFitness=%.4f | ExactMatch=%s"),
-				CurrentGeneration,
-				*BestCandidateString,
-				BestFitness,
-				bExactMatchFound ? TEXT("true") : TEXT("false"));
-			break;
-		}
-
-		TArray<FString> NextPopulation;
-		NextPopulation.Reserve(StringPopulation.Num());
-
-		if (bEnableElitism)
-		{
-			NextPopulation.Add(StringPopulation[BestIndex]);
-		}
-
-		while (NextPopulation.Num() < StringPopulation.Num())
-		{
-			const FString ParentA = SelectParentCandidate(StringPopulation, FitnessValues);
-			const FString ParentB = SelectParentCandidate(StringPopulation, FitnessValues);
-
-			FString Child = ParentA;
-			if (TargetLength > 1 && FMath::FRand() < SafeCrossoverRate)
-			{
-				const int32 SplitIndex = FMath::RandRange(1, TargetLength - 1);
-				Child = ParentA.Left(SplitIndex) + ParentB.Mid(SplitIndex);
-			}
-
-			MutateCandidate(Child, SafeMutationRate);
-			NextPopulation.Add(MoveTemp(Child));
-		}
-
-		StringPopulation = MoveTemp(NextPopulation);
-	}
-
-	const bool bSolved = (BestCandidateString == SanitizedTarget);
-	if (bSolved)
-	{
-		BestFitness = 1.0f;
-	}
-
-	UE_LOG(LogTemp, Display,
-		TEXT("[GA-STRING] Run complete | Solved=%s | Target=\"%s\" | Best=\"%s\" | Generation=%d | BestFitness=%.4f"),
-		bSolved ? TEXT("true") : TEXT("false"),
-		*SanitizedTarget,
-		*BestCandidateString,
-		CurrentGeneration,
-		BestFitness);
-
-	if (!bSolved)
-	{
+		bStringEvolutionRunning = false;
 		UE_LOG(LogTemp, Warning,
-			TEXT("[GA-STRING] Exact target was not reached. Try increasing PopulationSize/MaxGenerations or MutationRate."));
+			TEXT("[GA-STRING] Reached MaxGenerations (%d). Best=\"%s\" | BestFitness=%.4f"),
+			SafeMaxGenerations,
+			*BestCandidateString,
+			BestFitness);
+		return;
 	}
+
+	++CurrentGeneration;
+
+	TArray<float> FitnessValues;
+	FitnessValues.SetNum(StringPopulation.Num());
+
+	int32 BestIndex = 0;
+	float GenerationBestFitness = -1.0f;
+
+	for (int32 CandidateIndex = 0; CandidateIndex < StringPopulation.Num(); ++CandidateIndex)
+	{
+		FitnessValues[CandidateIndex] = EvaluateStringFitness(StringPopulation[CandidateIndex], ActiveTargetString);
+		if (FitnessValues[CandidateIndex] > GenerationBestFitness)
+		{
+			GenerationBestFitness = FitnessValues[CandidateIndex];
+			BestIndex = CandidateIndex;
+		}
+	}
+
+	CurrentCandidateString = StringPopulation[BestIndex];
+	const int32 CurrentMatchCount = CountExactMatches(CurrentCandidateString, ActiveTargetString);
+
+	if (GenerationBestFitness >= BestFitness)
+	{
+		BestFitness = GenerationBestFitness;
+		BestCandidateString = StringPopulation[BestIndex];
+	}
+
+	if (CurrentMatchCount > LastLoggedMatchCount)
+	{
+		LastLoggedMatchCount = CurrentMatchCount;
+		UE_LOG(LogTemp, Display,
+			TEXT("[GA-STRING] Progress | Current=\"%s\" | Target=\"%s\" | Matched=%d/%d | Generation=%d"),
+			*CurrentCandidateString,
+			*ActiveTargetString,
+			CurrentMatchCount,
+			ActiveTargetLength,
+			CurrentGeneration);
+	}
+
+	if (GenerationBestFitness >= SafeFitnessThreshold)
+	{
+		++ConsecutiveGenerationsAboveThreshold;
+	}
+	else
+	{
+		ConsecutiveGenerationsAboveThreshold = 0;
+	}
+
+	RefreshDisplayText();
+
+	const bool bReachedMinGeneration = CurrentGeneration >= SafeMinGenerationsBeforeStop;
+	const bool bReachedStability = ConsecutiveGenerationsAboveThreshold >= SafeRequiredStableGenerations;
+	const bool bExactMatchFound = BestCandidateString == ActiveTargetString;
+
+	if (bExactMatchFound || (bReachedMinGeneration && bReachedStability))
+	{
+		bStringEvolutionRunning = false;
+
+		if (bExactMatchFound)
+		{
+			BestFitness = 1.0f;
+		}
+
+		UE_LOG(LogTemp, Display,
+			TEXT("[GA-STRING] Run complete | Solved=%s | Target=\"%s\" | Best=\"%s\" | Generation=%d | BestFitness=%.4f"),
+			bExactMatchFound ? TEXT("true") : TEXT("false"),
+			*ActiveTargetString,
+			*BestCandidateString,
+			CurrentGeneration,
+			BestFitness);
+		return;
+	}
+
+	TArray<FString> NextPopulation;
+	NextPopulation.Reserve(StringPopulation.Num());
+
+	if (bEnableElitism)
+	{
+		NextPopulation.Add(StringPopulation[BestIndex]);
+	}
+
+	while (NextPopulation.Num() < StringPopulation.Num())
+	{
+		const FString ParentA = SelectParentCandidate(StringPopulation, FitnessValues);
+		const FString ParentB = SelectParentCandidate(StringPopulation, FitnessValues);
+
+		FString Child = ParentA;
+		if (ActiveTargetLength > 1 && FMath::FRand() < SafeCrossoverRate)
+		{
+			const int32 SplitIndex = FMath::RandRange(1, ActiveTargetLength - 1);
+			Child = ParentA.Left(SplitIndex) + ParentB.Mid(SplitIndex);
+		}
+
+		MutateCandidate(Child, ActiveTargetString, SafeMutationRate);
+		NextPopulation.Add(MoveTemp(Child));
+	}
+
+	StringPopulation = MoveTemp(NextPopulation);
 }

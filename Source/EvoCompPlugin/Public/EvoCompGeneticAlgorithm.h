@@ -3,6 +3,9 @@
 #include "EvoCompAlgorithmActor.h"
 #include "EvoCompGeneticAlgorithm.generated.h"
 
+class USceneComponent;
+class UTextRenderComponent;
+
 /**
  * Genetic algorithm implementation used by the first EvoComp blueprint workflow.
  */
@@ -13,6 +16,10 @@ class EVOCOMPPLUGIN_API AEvoCompGeneticAlgorithm : public AEvoCompAlgorithmActor
 
 public:
 	AEvoCompGeneticAlgorithm();
+
+	virtual void Tick(float DeltaTime) override;
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual bool ShouldTickIfViewportsOnly() const override;
 
 	// ── Configuration ────────────────────────────────────────────────────────
 
@@ -49,8 +56,8 @@ public:
 	bool bEnableElitism = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GA | String Test",
-		meta = (ToolTip = "Target string the GA will evolve toward. Default is HELLO."))
-	FString TargetString = TEXT("HELLO");
+		meta = (ToolTip = "Target string the GA will evolve toward."))
+	FString TargetString = TEXT("This is my target string for the genetic algorithm.");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GA | String Test",
 		meta = (ToolTip = "Use a fixed random seed for reproducible string-test runs."))
@@ -63,6 +70,26 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GA | String Test | Results",
 		meta = (ToolTip = "Best candidate string found by the latest string-target run."))
 	FString BestCandidateString;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GA | String Test | Results",
+		meta = (ToolTip = "Current generation best candidate, updated while string evolution runs."))
+	FString CurrentCandidateString;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GA | String Test | Results",
+		meta = (ToolTip = "Whether tick-driven string evolution is currently running."))
+	bool bStringEvolutionRunning = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GA | String Test",
+		meta = (ClampMin = "1", ClampMax = "100", ToolTip = "Number of string generations executed per actor tick while a run is active."))
+	int32 StringGenerationsPerTick = 1;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GA | Display",
+		meta = (ToolTip = "Component rendering the target string in-world."))
+	TObjectPtr<UTextRenderComponent> TargetTextComponent = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GA | Display",
+		meta = (ToolTip = "Component rendering the evolving current string in-world."))
+	TObjectPtr<UTextRenderComponent> CurrentTextComponent = nullptr;
 
 	// ── Actions (appear as buttons in the Details panel) ─────────────────────
 
@@ -87,10 +114,21 @@ private:
 	float EvaluateFitness(float GeneValue) const;
 	float SelectParentGene(const TArray<float>& InPopulation, const TArray<float>& InFitnessValues) const;
 	void ExecuteOneGeneration();
+	void RefreshDisplayText();
+	void StepStringGeneration();
 
 	FString SanitizeTargetString(const FString& InTarget) const;
 	FString CreateRandomCandidate(int32 Length) const;
 	FString SelectParentCandidate(const TArray<FString>& InPopulation, const TArray<float>& InFitnessValues) const;
 	float EvaluateStringFitness(const FString& Candidate, const FString& Target) const;
-	void MutateCandidate(FString& Candidate, float MutationChance) const;
+	void MutateCandidate(FString& Candidate, const FString& Target, float MutationChance) const;
+	int32 CountExactMatches(const FString& Candidate, const FString& Target) const;
+
+	UPROPERTY(VisibleAnywhere, Category = "GA | Display")
+	TObjectPtr<USceneComponent> DisplayRoot = nullptr;
+
+	TArray<FString> StringPopulation;
+	FString ActiveTargetString;
+	int32 ActiveTargetLength = 0;
+	int32 LastLoggedMatchCount = 0;
 };

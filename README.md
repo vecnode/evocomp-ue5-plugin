@@ -34,77 +34,81 @@ This plugin includes:
 
 <summary>Genetic Algorithm (GA)</summary>
 
+![image-github2](./Content/Targets/github_img2.png)
 
 #### Genetic Algorithm Implementation
 
+##### Purpose
 
+Evolve a random candidate string toward a fixed target sentence while showing the target and current best candidate directly in the editor viewport.
 
+Target string used by default:
 
+`This is my target string for the genetic algorithm.`
 
-- Search space: $x \in [0,1]$, population $P_t = \{x_1^{(t)},\dots,x_N^{(t)}\}$.
+##### Display Behavior
 
-- Fitness:
+- The actor auto-creates two text render components in the Blueprint/placed instance.
+- The top line shows the target sentence.
+- The lower line shows the current best candidate string.
+- Pressing the main `Run` action starts the string evolution and updates the current line over time.
+- When the best candidate improves, the editor log prints both the current string and the target string.
 
-  $$
-  \Delta = x - 0.78, \qquad
-  P(x) = e^{-32\Delta^2}, \qquad
-  R(x) = \frac{1 + \cos(22\Delta)}{2}
-  $$
+##### String Representation
 
-  $$
-  f(x) = \min\left(1,\max\left(0,\,P(x)\left(0.78 + 0.22R(x)\right)\right)\right)
-  $$
+- Population: a set of candidate strings with the same length as the target.
+- Alphabet: letters, spaces, and a few common punctuation marks used by the target sentence.
+- Candidate strings are generated randomly at the start of a run.
 
-- Selection (tournament size 2): sample $a,b$ uniformly and pick
+##### Fitness
 
-  $$
-  x_p =
-  \begin{cases}
-  x_a, & f(x_a) \ge f(x_b) \\
-  x_b, & f(x_b) > f(x_a)
-  \end{cases}
-  $$
+Fitness combines exact character matches and character closeness:
 
-- Crossover (probability $p_c$):
+$$
+f(s) = 0.80 \cdot \text{ExactMatchRatio} + 0.20 \cdot \text{ClosenessScore}
+$$
 
-  $$
-  \alpha \sim U(0.2,0.8), \qquad x_c = \alpha x_A + (1-\alpha)x_B
-  $$
+Exact matches dominate selection pressure, while the closeness term helps the search move toward the right letters faster.
 
-  Otherwise, $x_c = x_A$.
+##### Selection
 
-- Mutation (probability $p_m$):
+Tournament selection of size 2 is used:
 
-  $$
-  x_c \leftarrow x_c + \epsilon, \qquad
-  \epsilon \sim U(-0.1,0.1), \qquad
-  x_c \leftarrow \min(1,\max(0,x_c))
-  $$
+$$
+s_p =
+\begin{cases}
+s_a, & f(s_a) \ge f(s_b) \\
+s_b, & f(s_b) > f(s_a)
+\end{cases}
+$$
 
-- Elitism: if enabled, copy best of $P_t$ directly into $P_{t+1}$.
+##### Crossover
 
-- Running best:
+With probability $p_c$, two parents combine with a single split point:
 
-  $$
-  F_t = \max\left(F_{t-1},\max_{x\in P_t} f(x)\right)
-  $$
+$$
+s_c = s_A[0:k] + s_B[k:]
+$$
 
-- Stability counter with threshold $\tau$:
+Otherwise, the child is copied from the first parent.
 
-  $$
-  s_t =
-  \begin{cases}
-  s_{t-1}+1, & F_t \ge \tau \\
-  0, & F_t < \tau
-  \end{cases}
-  $$
+##### Mutation
 
-- Early stop when both hold: $t \ge G_{\min}$ and $s_t \ge S_{\min}$; otherwise continue to MaxGenerations.
+With probability $p_m$, non-matching characters may be randomized. Already-correct characters are preserved so progress is not immediately lost after a match is found.
 
-Current defaults:
+##### Run Flow
+
+1. Reset the actor state.
+2. Create a random string population.
+3. On each tick, step the string GA one or more generations.
+4. Update the current on-screen string and print progress when the best match count improves.
+5. Stop when the target is solved or the generation limit is reached.
+
+##### Current Defaults
 
 | Parameter | Value |
 | --- | --- |
+| TargetString | This is my target string for the genetic algorithm. |
 | PopulationSize | 20 |
 | MaxGenerations | 500 |
 | MutationRate | 0.08 |
@@ -113,37 +117,9 @@ Current defaults:
 | MinGenerationsBeforeStop | 30 |
 | RequiredStableGenerations | 8 |
 | bEnableElitism | true |
+| StringGenerationsPerTick | 1 |
 
 
-#### String Target Test (Default: HELLO)
-
-The same GA actor now includes a simple string-search test:
-
-- `TargetString` (editable, default `HELLO`)
-- `Run String Target Test` button in `GA | Actions`
-- `BestCandidateString` output in `GA | String Test | Results`
-
-How it works:
-
-- Each candidate is a fixed-length string with the same length as `TargetString`.
-- Selection uses tournament selection.
-- Crossover uses one-point splice.
-- Mutation changes random characters based on `MutationRate`.
-- Fitness rewards exact character matches, with a small character-distance bonus.
-- The run stops when exact match is found or early-stop criteria are satisfied.
-
-Recommended starting values for quick convergence:
-
-- PopulationSize: 120
-- MaxGenerations: 400
-- MutationRate: 0.06
-- CrossoverRate: 0.80
-- FitnessThreshold: 1.0
-- MinGenerationsBeforeStop: 10
-- RequiredStableGenerations: 3
-- bEnableElitism: true
-- bUseDeterministicSeed: true
-- RandomSeed: 1337
 
 
 
